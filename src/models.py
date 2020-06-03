@@ -11,7 +11,8 @@ class PolygonVGG16(nn.Module):
     def __init__(self):
         super(PolygonVGG16, self).__init__()
         vgg = torchvision.models.vgg16(pretrained=True).features
-        self.layers = nn.Sequential(*list(vgg.children())[:-1])  # remove max-pooling
+        # remove max-pooling
+        self.layers = nn.Sequential(*list(vgg.children())[:-1])
         self.store_indices: List[int] = [9, 16, 22, 29]
 
         # used to assert
@@ -134,19 +135,24 @@ class ConvLSTMCell(nn.Module):
         self.padding = kernel_size[0] // 2, kernel_size[1] // 2
         self.bias = bias
 
-        self.conv = nn.Conv2d(in_channels=self.input_dim + self.hidden_dim,
-                              out_channels=4 * self.hidden_dim,
-                              kernel_size=self.kernel_size,
-                              padding=self.padding,
-                              bias=self.bias)
+        self.conv = nn.Conv2d(
+            in_channels=self.input_dim + self.hidden_dim,
+            out_channels=4 * self.hidden_dim,
+            kernel_size=self.kernel_size,
+            padding=self.padding,
+            bias=self.bias
+        )
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
 
-        combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
+        # concatenate along channel axis
+        combined = torch.cat([input_tensor, h_cur], dim=1)
 
         combined_conv = self.conv(combined)
-        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
+        cc_i, cc_f, cc_o, cc_g = torch.split(
+            combined_conv, self.hidden_dim, dim=1
+        )
         i = torch.sigmoid(cc_i)
         f = torch.sigmoid(cc_f)
         o = torch.sigmoid(cc_o)
@@ -158,19 +164,32 @@ class ConvLSTMCell(nn.Module):
         return h_next, c_next
 
     def init_hidden(self, batch_size):
-        return (Variable(torch.zeros(batch_size, self.hidden_dim, self.height, self.width)),
-                Variable(torch.zeros(batch_size, self.hidden_dim, self.height, self.width)))
+        return (
+            Variable(
+                torch.zeros(
+                    batch_size, self.hidden_dim, self.height, self.width
+                )
+            ),
+            Variable(
+                torch.zeros(
+                    batch_size, self.hidden_dim, self.height, self.width
+                )
+            )
+        )
 
 
 class ConvLSTM(nn.Module):
 
-    def __init__(self, input_size, input_dim, hidden_dim, kernel_size, num_layers,
-                 batch_first = False, bias = True, return_all_layers = False):
+    def __init__(
+        self, input_size, input_dim, hidden_dim, kernel_size, num_layers,
+        batch_first=False, bias=True, return_all_layers=False
+    ):
         super(ConvLSTM, self).__init__()
 
         self._check_kernel_size_consistency(kernel_size)
 
-        # Make sure that both `kernel_size` and `hidden_dim` are lists having len == num_layers
+        # Make sure that both `kernel_size` and `hidden_dim` are
+        # lists having len == num_layers
         kernel_size = self._extend_for_multilayer(kernel_size, num_layers)
         hidden_dim = self._extend_for_multilayer(hidden_dim, num_layers)
         if not len(kernel_size) == len(hidden_dim) == num_layers:
@@ -188,18 +207,20 @@ class ConvLSTM(nn.Module):
 
         cell_list = []
         for i in range(0, self.num_layers):
-            cur_input_dim = self.input_dim if i == 0 else self.hidden_dim[i - 1]
+            cur_input_dim = \
+                self.input_dim if i == 0 else self.hidden_dim[i - 1]
 
-            cell_list.append(ConvLSTMCell(input_size=(self.height, self.width),
-                                          input_dim=cur_input_dim,
-                                          hidden_dim=self.hidden_dim[i],
-                                          kernel_size=self.kernel_size[i],
-                                          bias=self.bias))
+            cell_list.append(ConvLSTMCell(
+                input_size=(self.height, self.width),
+                input_dim=cur_input_dim,
+                hidden_dim=self.hidden_dim[i],
+                kernel_size=self.kernel_size[i],
+                bias=self.bias
+            ))
 
         self.cell_list = nn.ModuleList(cell_list)
 
-
-    def forward(self, input_tensor, hidden_state = None):
+    def forward(self, input_tensor, hidden_state=None):
         """
         Parameters
         ----------
@@ -232,10 +253,10 @@ class ConvLSTM(nn.Module):
             h, c = hidden_state[layer_idx]
             output_inner = []
             for t in range(seq_len):
-                #                 print(cur_layer_input.shape)
-
-                h, c = self.cell_list[layer_idx](input_tensor=cur_layer_input[:, t, :, :, :],
-                                                 cur_state=[h, c])
+                h, c = self.cell_list[layer_idx](
+                    input_tensor=cur_layer_input[:, t, :, :, :],
+                    cur_state=[h, c]
+                )
                 output_inner.append(h)
 
             layer_output = torch.stack(output_inner, dim=1)
@@ -250,20 +271,20 @@ class ConvLSTM(nn.Module):
 
         return layer_output_list, last_state_list
 
-
     def _init_hidden(self, batch_size):
         init_states = []
         for i in range(self.num_layers):
             init_states.append(self.cell_list[i].init_hidden(batch_size))
         return init_states
 
-
     @staticmethod
     def _check_kernel_size_consistency(kernel_size):
-        if not (isinstance(kernel_size, tuple) or
-                (isinstance(kernel_size, list) and all([isinstance(elem, tuple) for elem in kernel_size]))):
+        is_tuple: bool = isinstance(kernel_size, tuple)
+        is_list: bool = isinstance(kernel_size, list)
+        is_elem_tuple = all([isinstance(elem, tuple) for elem in kernel_size])
+        is_ok: bool = is_tuple or is_list and is_elem_tuple
+        if not is_ok:
             raise ValueError('`kernel_size` must be tuple or list of tuples')
-
 
     @staticmethod
     def _extend_for_multilayer(param, num_layers):
@@ -287,6 +308,12 @@ class PolygonRNN(nn.Module):
             bias=True,
             return_all_layers=True
         )
+        self.lstm = nn.LSTM(
+            input_size=28 * 28 * 8 + (28 * 28 + 3) * 2,
+            hidden_size=28 * 28 * 2,
+            batch_first=True
+        )
+        self.fc = nn.Linear(28 * 28 * 2, 28 * 28 + 3)
 
     def _check_input(self, x: torch.Tensor):
         assert x.size()[1:] == torch.Size([3, 224, 224])
@@ -294,31 +321,42 @@ class PolygonRNN(nn.Module):
     def forward(self, img, first, second, third):
         size: torch.Size = second.size()
         batch_size: int = size[0]
-        length_s: int = size[1]
+        seq_len: int = size[1]  # sequential length
 
         self._check_input(img)
         features = self.cnn(img)
 
         # (B, 128, 28, 28) -> (B, 1, 128, 28, 28)
         output = features.unsqueeze(1)
-        # (B, 1, 128, 28, 28) -> (B, 58, 128, 28, 28)
-        output = output.repeat(1, length_s, 1, 1, 1)
-        # (B, 28*28+3) -> (B, 57, 1, 28, 28)
+        # (B, 1, 128, 28, 28) -> (B, seq_len, 128, 28, 28)
+        output = output.repeat(1, seq_len, 1, 1, 1)
+        # (B, 28*28+3) -> (B, seq_len-1, 1, 28, 28)
         input_f = first[:, :-3].view(-1, 1, 28, 28).unsqueeze(1).repeat(
-            1, length_s - 1, 1, 1, 1
+            1, seq_len - 1, 1, 1, 1
         )
         padding_f = torch.zeros([batch_size, 1, 1, 28, 28])
 
-        # (B, 57, 1, 28, 28) -> (B, 58, 1, 28, 28)
+        # (B, seq_len-1, 1, 28, 28) -> (B, seq_len, 1, 28, 28)
         input_f = torch.cat([padding_f, input_f], dim=1)
-        # (B, 58, 28*28+3) -> (B, 58, 1, 28, 28)
-        input_s = second[:, :, :-3].view(-1, length_s, 1, 28, 28)
-        # (B, 58, 28*28+3) -> (B, 58, 1, 28, 28)
-        input_t = third[:, :, :-3].view(-1, length_s, 1, 28, 28)
-        # (B, 58, 131, 28, 28)
+        # (B, seq_len, 28*28+3) -> (B, seq_len, 1, 28, 28)
+        input_s = second[:, :, :-3].view(-1, seq_len, 1, 28, 28)
+        # (B, seq_len, 28*28+3) -> (B, seq_len, 1, 28, 28)
+        input_t = third[:, :, :-3].view(-1, seq_len, 1, 28, 28)
+        # (B, seq_len, 131, 28, 28)
         output = torch.cat([output, input_f, input_s, input_t], dim=2)
-        output = self.conv_lstm(output)[0][-1]
-        return output  # (B, 58, 8, 28, 28)
+        output = self.conv_lstm(output)[0][-1]  # (B, seq_len, 8, 28, 28)
+
+        # (B, seq_len, 8, 28, 28) -> (B, seq_len, 6272)
+        output = output.contiguous().view(batch_size, seq_len, -1)
+        # (B, seq_len, 7846)
+        output = torch.cat([output, second, third], dim=2)
+        output = self.lstm(output)[0]  # (B, seq_len, 1568)
+        # (B*seq_len, 1568)
+        output = output.contiguous().view(batch_size * seq_len, -1)
+        output = self.fc(output)  # (B*seq_len, 787)
+        output = output.contiguous().view(batch_size, seq_len, -1)
+
+        return output  # (B, seq_len, 787)
 
 
 if __name__ == '__main__':
