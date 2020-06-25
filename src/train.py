@@ -3,8 +3,9 @@ from logging import getLogger, StreamHandler, INFO
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from torchvision import transforms
 
-import datasets
+from datasets import PolygonCityScapesDataset, load_cityscapes
 from models import PolygonRNN
 
 logger = getLogger(__name__)
@@ -37,7 +38,18 @@ if __name__ == '__main__':
         gamma=0.1
     )
 
-    train_loader = datasets.load_data(data_size, 'train', seq_len, batch_size)
+    datasets = load_cityscapes()
+
+    dtrain = PolygonCityScapesDataset(city_paths=datasets['train'], transform=transforms.ToTensor())
+    dval = PolygonCityScapesDataset(city_paths=datasets['val'], transform=transforms.ToTensor())
+    dtest = PolygonCityScapesDataset(city_paths=datasets['test'], transform=transforms.ToTensor())
+
+    train_loader = torch.utils.data.DataLoader(
+        dtrain, batch_size=batch_size,
+        shuffle=True, drop_last=True
+    )
+    val_loader = torch.utils.data.DataLoader(dtrain, batch_size=batch_size)
+    test_loader = torch.utils.data.DataLoader(dtrain, batch_size=batch_size)
 
     for epoch in range(1, num_epochs + 1):
         for batch_idx, data in enumerate(train_loader):
@@ -49,7 +61,7 @@ if __name__ == '__main__':
 
             optimizer.zero_grad()
 
-            outputs = net(x, x1, x2, x3)
+            outputs: torch.Tensor = net(x, x1, x2, x3)
 
             outputs: torch.Tensor = outputs.contiguous().view(-1, 28 * 28 + 3)
             targets: torch.Tensor = gt.contiguous().view(-1)

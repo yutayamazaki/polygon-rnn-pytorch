@@ -76,7 +76,7 @@ class PolygonCNN(nn.Module):
                 in_channels=512, out_channels=128, kernel_size=3,
                 stride=1, padding=1
             ),
-            nn.Upsample(size=28, mode='bilinear')
+            nn.Upsample(size=28, mode='bilinear', align_corners=False)
         )
 
         # x: (512, 28, 28) -> conv: (128, 28, 28)
@@ -326,11 +326,11 @@ class PolygonRNN(nn.Module):
         self._check_input(img)
         features = self.cnn(img)
 
-        # (B, 128, 28, 28) -> (B, 1, 128, 28, 28)
+        # (B, C: 128, H: 28, W: 28) -> (B, 1, C: 128, H: 28, W: 28)
         output = features.unsqueeze(1)
-        # (B, 1, 128, 28, 28) -> (B, seq_len, 128, 28, 28)
+        # (B, 1, C* 128, H: 28, W: 28) -> (B, seq_len, C: 128, H: 28, W: 28)
         output = output.repeat(1, seq_len, 1, 1, 1)
-        # (B, 28*28+3) -> (B, seq_len-1, 1, 28, 28)
+        # (B, H*W*C: 28*28+3) -> (B, seq_len-1, 1, H: 28, W: 28)
         input_f = first[:, :-3].view(-1, 1, 28, 28).unsqueeze(1).repeat(
             1, seq_len - 1, 1, 1, 1
         )
