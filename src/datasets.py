@@ -6,8 +6,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import torch
 from PIL import Image
-from torch.autograd import Variable
-from torchvision import transforms
+from torch.utils.data.dataset import Dataset
 
 
 def load_cityscapes(
@@ -15,15 +14,22 @@ def load_cityscapes(
     anno_root: str = '../gtFine_trainvaltest/'
 ) -> Dict[str, List[Tuple[str, str]]]:
     # train: 2975, val: 500, test: 1525
-    datasets: Dict[str, List[Tuple[str, str]]] = {'train': [], 'val': [], 'test': []}
+    datasets: Dict[str, List[Tuple[str, str]]] = {
+        'train': [], 'val': [], 'test': []
+    }
     for phase in ('train', 'val', 'test'):
-        json_paths: List[str] = glob.glob(os.path.join(anno_root, 'gtFine', phase, '*', '*.json'))
+        json_paths: List[str] = glob.glob(
+            os.path.join(anno_root, 'gtFine', phase, '*', '*.json')
+        )
         for json_path in json_paths:
             # file_id = 'munich_000187_000019_gtFine_'
             file_id: str = os.path.basename(json_path)[:-21]
             cityname: str = file_id.split('_')[0]
 
-            img_path = os.path.join(img_root, 'leftImg8bit', phase, cityname, f'{file_id}_leftImg8bit.png')
+            img_path = os.path.join(
+                img_root, 'leftImg8bit', phase, cityname,
+                f'{file_id}_leftImg8bit.png'
+            )
 
             if os.path.exists(img_path) and os.path.exists(json_path):
                 datasets[phase].append((img_path, json_path))
@@ -32,7 +38,7 @@ def load_cityscapes(
     return datasets
 
 
-class PolygonCityScapesDataset(torch.utils.data.dataset.Dataset):
+class PolygonCityScapesDataset(Dataset):
 
     def __init__(
         self,
@@ -48,14 +54,14 @@ class PolygonCityScapesDataset(torch.utils.data.dataset.Dataset):
         ]
 
     def _resize_polygon(self, polygon: List[List[int]]) -> List[List[float]]:
-        polygon: np.ndarray = np.array(polygon)
+        polygon = np.array(polygon)
 
-        min_x: int = int(np.min(polygon[:, 0]))
-        min_y: int = int(np.min(polygon[:, 1]))
-        max_x: int = int(np.max(polygon[:, 0]))
-        max_y: int = int(np.max(polygon[:, 1]))
+        min_x: int = int(np.min(polygon[:, 0]))  # type: ignore
+        min_y: int = int(np.min(polygon[:, 1]))  # type: ignore
+        max_x: int = int(np.max(polygon[:, 0]))  # type: ignore
+        max_y: int = int(np.max(polygon[:, 1]))  # type: ignore
 
-        new_polygon: List[List[int]] = []
+        new_polygon: List[List[float]] = []
         for points in polygon:
             object_h: int = max_y - min_y
             object_w: int = max_x - min_x
@@ -63,21 +69,13 @@ class PolygonCityScapesDataset(torch.utils.data.dataset.Dataset):
             scale_w: float = 224.0 / object_w
             index_a: float = (points[0] - min_x) * scale_w
             index_b: float = (points[1] - min_y) * scale_h
-            index_a: float = np.maximum(0, np.minimum(223, index_a))
-            index_b: float = np.maximum(0, np.minimum(223, index_b))
-            points: List[float] = [index_a, index_b]
-            new_polygon.append(points)
+            index_a_: float = np.maximum(0, np.minimum(223, index_a))
+            index_b_: float = np.maximum(0, np.minimum(223, index_b))
+            new_points: List[float] = [index_a_, index_b_]
+            new_polygon.append(new_points)
         return new_polygon
 
     def __getitem__(self, index):
-        # mock
-        # img = torch.zeros((3, 224, 224))  # (B, C, H, W)
-        # first = torch.zeros((28*28+3))
-        # second = torch.zeros((58, 28*28+3))
-        # third = torch.zeros((58, 28*28+3))
-        # gt = torch.zeros([self.seq_len])[2:]
-        # return (img, first, second, third, gt)
-
         img_path, json_path = self.city_paths[index]
 
         with open(json_path, 'r') as f:
@@ -95,7 +93,8 @@ class PolygonCityScapesDataset(torch.utils.data.dataset.Dataset):
         max_x = np.max(polygon_array[:, 0])
         max_y = np.max(polygon_array[:, 1])
 
-        img: Image.Image = Image.open(img_path).convert('RGB').crop((min_x, min_y, max_x, max_y))
+        shape = (min_x, min_y, max_x, max_y)
+        img: Image.Image = Image.open(img_path).convert('RGB').crop(shape)
         img: Image.Image = img.resize((224, 224), Image.BILINEAR)
 
         point_num: int = len(polygon)
@@ -123,8 +122,8 @@ class PolygonCityScapesDataset(torch.utils.data.dataset.Dataset):
                 elif kkk % (point_num + 3) == 1:
                     index: int = 28 * 28 + 2
                 else:
-                    index_a: int = int(polygon[kkk % (point_num + 3) - 2][0] / 8)
-                    index_b: int = int(polygon[kkk % (point_num + 3) - 2][1] / 8)
+                    index_a = int(polygon[kkk % (point_num + 3) - 2][0] / 8)
+                    index_b = int(polygon[kkk % (point_num + 3) - 2][1] / 8)
                     index: int = index_b * 28 + index_a
                 label_array[kkk, index] = 1
                 label_index_array[kkk] = index
@@ -155,52 +154,3 @@ class PolygonCityScapesDataset(torch.utils.data.dataset.Dataset):
     def __len__(self) -> int:
         # Number of images.
         return len(self.city_paths)
-
-
-def load_data(data_size: int, data_type: str, seq_len: int, batch_size: int):
-    """
-    Args:
-        data_size (int): Number of images in this dataset.
-        data_type (str): Specify 'train', 'val', 'test'.
-        seq_len (int): Sequantial length of LSTM.
-        batch_size (int): bacth size.
-    Returns:
-        torch.utils.data.DataLoader
-    """
-    transform = transforms.ToTensor()
-    dataset: PolygonDataset = PolygonCityScapesDataset(
-        data_size, data_type, seq_len, transform
-    )
-    data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size,
-        shuffle=True, drop_last=False
-    )
-    return data_loader
-
-
-if __name__ == '__main__':
-    batch_size: int = 3
- 
-    datasets = load_cityscapes()
-    for phase in ('train', 'val', 'test'):
-        print(len(datasets[phase]))
-
-    dtrain = PolygonCityScapesDataset(city_paths=datasets['train'], transform=transforms.ToTensor())
-    dval = PolygonCityScapesDataset(city_paths=datasets['val'], transform=transforms.ToTensor())
-    dtest = PolygonCityScapesDataset(city_paths=datasets['test'], transform=transforms.ToTensor())
-
-    train_loader = torch.utils.data.DataLoader(
-        dtrain, batch_size=batch_size,
-        shuffle=True, drop_last=True
-    )
-    val_loader = torch.utils.data.DataLoader(dtrain, batch_size=batch_size)
-    test_loader = torch.utils.data.DataLoader(dtrain, batch_size=batch_size)
-
-    for step, data in enumerate(train_loader):
-        x = Variable(data[0])
-        x1 = Variable(data[1])
-        x2 = Variable(data[2])
-        x3 = Variable(data[3])
-        ta = Variable(data[4])
-
-        print(x.size(), x1.size(), x2.size(), x3.size(), ta.size())

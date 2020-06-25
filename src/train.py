@@ -28,7 +28,7 @@ if __name__ == '__main__':
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     net: nn.Module = PolygonRNN()
-    net: nn.Module = net.to(device)
+    net = net.to(device)
 
     criterion: nn.Module = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
@@ -40,9 +40,15 @@ if __name__ == '__main__':
 
     datasets = load_cityscapes()
 
-    dtrain = PolygonCityScapesDataset(city_paths=datasets['train'], transform=transforms.ToTensor())
-    dval = PolygonCityScapesDataset(city_paths=datasets['val'], transform=transforms.ToTensor())
-    dtest = PolygonCityScapesDataset(city_paths=datasets['test'], transform=transforms.ToTensor())
+    dtrain = PolygonCityScapesDataset(
+        city_paths=datasets['train'], transform=transforms.ToTensor()
+    )
+    dval = PolygonCityScapesDataset(
+        city_paths=datasets['val'], transform=transforms.ToTensor()
+    )
+    dtest = PolygonCityScapesDataset(
+        city_paths=datasets['test'], transform=transforms.ToTensor()
+    )
 
     train_loader = torch.utils.data.DataLoader(
         dtrain, batch_size=batch_size,
@@ -63,15 +69,17 @@ if __name__ == '__main__':
 
             outputs: torch.Tensor = net(x, x1, x2, x3)
 
-            outputs: torch.Tensor = outputs.contiguous().view(-1, 28 * 28 + 3)
+            outputs = outputs.contiguous().view(-1, 28 * 28 + 3)
             targets: torch.Tensor = gt.contiguous().view(-1)
 
             loss = criterion(outputs, targets)
             loss.backward()
 
             output_index: torch.Tensor = torch.argmax(outputs, 1)
-            correct: float = (targets == output_index).type(dtype).sum().item()
-            acc: float = correct * 1.0 / targets.shape[0]
+            correct = (
+                targets == output_index  # type: ignore
+            ).type(dtype).sum().item()
+            acc = correct * 1.0 / targets.shape[0]
 
             msg: str = f'EPOCH: {epoch}/{num_epochs}, ' + \
                        f'BATCH: {batch_idx + 1}, ACC: {acc}'
