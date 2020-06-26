@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 import torch
 import torch.nn as nn
@@ -23,15 +23,10 @@ class PolygonVGG16(nn.Module):
             torch.Size([512, 14, 14])
         )
 
-    def _check_input(self, x: torch.Tensor):
-        assert x.size()[1:] == torch.Size([3, 224, 224])
-
-    def _check_output(self, x: List[torch.Tensor]):
-        for out, expected in zip(x, self.output_shapes):
-            assert out.size()[1:] == expected
-
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        self._check_input(x)
+        # (3, H, W) -> 
+        # [(128, 56, 56), (256, 28, 28), (512, 28, 28), (512, 28, 28]
+        assert x.size()[1:] == torch.Size([3, 224, 224])
 
         outputs: List[torch.Tensor] = []
         for idx, layer in enumerate(self.layers):
@@ -39,7 +34,6 @@ class PolygonVGG16(nn.Module):
             if idx in self.store_indices:
                 outputs.append(x)
 
-        self._check_output(outputs)
         return outputs
 
 
@@ -85,14 +79,8 @@ class PolygonCNN(nn.Module):
             stride=1, padding=1
         )
 
-    def _check_input(self, x: torch.Tensor):
-        assert x.size()[1:] == torch.Size([3, 224, 224])
-
-    def _check_output(self, output: torch.Tensor):
-        assert output.size()[1:] == torch.Size([128, 28, 28])
-
     def forward(self, x):
-        self._check_input(x)
+        assert x.size()[1:] == torch.Size([3, 224, 224])
 
         x1, x2, x3, x4 = self.cnn(x)
         out1 = self.out1_layers(x1)  # (128, 28, 28)
@@ -102,13 +90,17 @@ class PolygonCNN(nn.Module):
 
         x_concat = torch.cat((out1, out2, out3, out4), 1)  # (512, 28, 28)
         out = self.conv(x_concat)  # (128, 28, 28)
-        self._check_output(out)
+
+        assert out.size()[1:] == torch.Size([128, 28, 28])
         return out
 
 
 class ConvLSTMCell(nn.Module):
 
-    def __init__(self, input_size, input_dim, hidden_dim, kernel_size, bias):
+    def __init__(
+        self, input_size, input_dim, hidden_dim, kernel_size, bias,
+        device: Optional[str] = None
+    ):
         """
         Initialize ConvLSTM cell.
         Parameters
@@ -143,6 +135,10 @@ class ConvLSTMCell(nn.Module):
             bias=self.bias
         )
 
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.devive: str = devive
+
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
 
@@ -169,12 +165,12 @@ class ConvLSTMCell(nn.Module):
             Variable(
                 torch.zeros(
                     batch_size, self.hidden_dim, self.height, self.width
-                ).to(device)
+                ).to(self.device)
             ),
             Variable(
                 torch.zeros(
                     batch_size, self.hidden_dim, self.height, self.width
-                ).to(device)
+                ).to(self.device)
             )
         )
 
@@ -183,7 +179,8 @@ class ConvLSTM(nn.Module):
 
     def __init__(
         self, input_size, input_dim, hidden_dim, kernel_size, num_layers,
-        batch_first=False, bias=True, return_all_layers=False
+        batch_first=False, bias=True, return_all_layers=False,
+        device: Optional[str] = None
     ):
         super(ConvLSTM, self).__init__()
 
@@ -206,6 +203,10 @@ class ConvLSTM(nn.Module):
         self.bias = bias
         self.return_all_layers = return_all_layers
 
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.devive: str = devive
+
         cell_list = []
         for i in range(0, self.num_layers):
             cur_input_dim = \
@@ -216,7 +217,8 @@ class ConvLSTM(nn.Module):
                 input_dim=cur_input_dim,
                 hidden_dim=self.hidden_dim[i],
                 kernel_size=self.kernel_size[i],
-                bias=self.bias
+                bias=self.bias,
+                device=self.device
             ))
 
         self.cell_list = nn.ModuleList(cell_list)
@@ -295,7 +297,7 @@ class ConvLSTM(nn.Module):
 
 class PolygonRNN(nn.Module):
 
-    def __init__(self):
+    def __init__(self, device: Optional[str] = None):
         super(PolygonRNN, self).__init__()
         self.cnn = PolygonCNN()
         self.conv_lstm = ConvLSTM(
@@ -314,9 +316,9 @@ class PolygonRNN(nn.Module):
             batch_first=True
         )
         self.fc = nn.Linear(28 * 28 * 2, 28 * 28 + 3)
-
-    def _check_input(self, x: torch.Tensor):
-        assert x.size()[1:] == torch.Size([3, 224, 224])
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.devive: str = devive
 
     def forward(self, img, first, second, third):
         device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -324,7 +326,7 @@ class PolygonRNN(nn.Module):
         batch_size: int = size[0]
         seq_len: int = size[1]  # sequential length
 
-        self._check_input(img)
+        assert img.size()[1:] == torch.Size([3, 224, 224])
         features = self.cnn(img)
 
         # (B, C: 128, H: 28, W: 28) -> (B, 1, C: 128, H: 28, W: 28)
@@ -335,7 +337,7 @@ class PolygonRNN(nn.Module):
         input_f = first[:, :-3].view(-1, 1, 28, 28).unsqueeze(1).repeat(
             1, seq_len - 1, 1, 1, 1
         )
-        padding_f = torch.zeros([batch_size, 1, 1, 28, 28]).to(device)
+        padding_f = torch.zeros([batch_size, 1, 1, 28, 28]).to(self.device)
 
         # (B, seq_len-1, 1, 28, 28) -> (B, seq_len, 1, 28, 28)
         input_f = torch.cat([padding_f, input_f], dim=1)

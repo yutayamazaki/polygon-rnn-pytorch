@@ -1,14 +1,21 @@
+from typing import Optional
+
 import torch
 from torch.autograd import Variable
 
 
 class AbstractTrainer:
 
-    def __init__(self, model, optimizer, criterion):
+    def __init__(
+        self, model, optimizer, criterion,
+        device: Optional[str] = None
+    ):
         self.optimizer = optimizer
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self._model = model.to(self.device)
         self.criterion = criterion.to(self.device)
+        self.device = device
+        if device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def epoch_train(self, train_loader):
         raise NotImplementedError()
