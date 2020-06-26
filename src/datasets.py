@@ -36,6 +36,7 @@ def load_cityscapes(
 
         assert len(json_paths) == len(datasets[phase])
     return datasets
+    # return {k: v[:6] for k, v in datasets.items()}
 
 
 class PolygonCityScapesDataset(Dataset):
@@ -146,7 +147,10 @@ class PolygonCityScapesDataset(Dataset):
                 label_index_array[kkk] = index
 
         img: torch.Tensor = self.transform(img)
-        return (
+        # label_array[2] (787, ): {0: 786, 1: 1}
+        # label_index_array (seq_len, ): Hold points of polygon in each
+        #                                sequence by its index.
+g        return (
             img, label_array[2], label_array[:-2],
             label_array[1:-1], label_index_array[2:]
         )
