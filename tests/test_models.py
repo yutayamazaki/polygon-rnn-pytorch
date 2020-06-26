@@ -1,5 +1,5 @@
 import unittest
-from typing import List
+from typing import List, Tuple
 
 import torch
 import torch.nn as nn
@@ -50,6 +50,81 @@ class PolygonCNNTests(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             net(fuckin_inputs)
+
+
+class ConvLSTMCellTests(unittest.TestCase):
+
+    def test_forward_simple(self):
+        input_size: Tuple[int, int] = (28, 28)  # height and width
+        input_dim: int = 131  # 128 + 3
+        hidden_dim: int = 32
+        kernel_size: int = (3, 3)
+        bias: bool = True
+        batch: int = 2
+
+        net = models.ConvLSTMCell(
+            input_size,
+            input_dim,
+            hidden_dim,
+            kernel_size,
+            bias
+        )
+        inputs: torch.Tensor = torch.zeros((batch, input_dim, 28, 28))
+        cur_state: List[torch.Tensor] = [
+            torch.zeros((batch, hidden_dim, 28, 28)),
+            torch.zeros((batch, hidden_dim, 28, 28))
+        ]
+        h, c = net(inputs, cur_state)
+
+        self.assertEqual(h.size(), torch.Size((batch, hidden_dim, 28, 28)))
+        self.assertEqual(c.size(), torch.Size((batch, hidden_dim, 28, 28)))
+
+
+class ConvLSTMTests(unittest.TestCase):
+
+    def test_forward_simple(self):
+        input_size: Tuple[int, int] = (28, 28)  # height and width
+        input_dim: int = 131  # 128 + 3
+        hidden_dim: List[int, int] = [32, 8]
+        kernel_size: Tuple[int] = (3, 3)
+        bias: bool = True
+        batch: int = 2
+        num_layers: int = 2
+        batch_first: bool = True
+        return_all_layers: bool = True
+        seq_len: int = 58
+
+        net = models.ConvLSTM(
+            input_size,
+            input_dim,
+            hidden_dim,
+            kernel_size,
+            num_layers,
+            batch_first,
+            bias,
+            return_all_layers
+        )
+        # (B, seq_len, 128 + 3(first, sencond, third), H, W)
+        inputs: torch.Tensor = torch.zeros((2, seq_len, 131, 28, 28))
+        layer_output_list, last_state_list = net(inputs)
+
+        self.assertIsInstance(layer_output_list, list)
+        self.assertIsInstance(last_state_list, list)
+
+        expected_shape = [
+            torch.Size([2, 58, 32, 28, 28]),
+            torch.Size([2, 58, 8, 28, 28])
+        ]
+        for out, shape in zip(layer_output_list, expected_shape):
+            self.assertEqual(out.size(), shape)
+
+        expected_shape = [
+            torch.Size([2, 32, 28, 28]),
+            torch.Size([2, 8, 28, 28])
+        ]
+        for out, shape in zip(last_state_list, expected_shape):
+            for o in out:
+                self.assertEqual(o.size(), shape)
 
 
 class PolygonRNNTests(unittest.TestCase):

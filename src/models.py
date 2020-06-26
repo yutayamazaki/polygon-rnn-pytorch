@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -138,7 +138,11 @@ class ConvLSTMCell(nn.Module):
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device: str = device
 
-    def forward(self, input_tensor, cur_state):
+    def forward(
+        self,
+        input_tensor: torch.Tensor,
+        cur_state: List[torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         h_cur, c_cur = cur_state
 
         # concatenate along channel axis
@@ -343,6 +347,9 @@ class PolygonRNN(nn.Module):
         input_s = second[:, :, :-3].view(-1, seq_len, 1, 28, 28)
         # (B, seq_len, 28*28+3) -> (B, seq_len, 1, 28, 28)
         input_t = third[:, :, :-3].view(-1, seq_len, 1, 28, 28)
+
+        # output: (B, seq_len, 128, 28, 28)
+        # input_f, input_s, input_t: (B, seq_len, 1, 28, 28)
         # (B, seq_len, 131, 28, 28)
         output = torch.cat([output, input_f, input_s, input_t], dim=2)
         output = self.conv_lstm(output)[0][-1]  # (B, seq_len, 8, 28, 28)
