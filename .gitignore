@@ -1,6 +1,12 @@
 # Custom
 .DS_Store
 .vscode
+experiments/*
+!experiments/.gitkeep
+gtFine_trainvaltest/*
+!gtFine_trainvaltest/.gitkeep
+leftImg8bit_trainvaltest/*
+!leftImg8bit_trainvaltest/.gitkeep
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
