@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -8,9 +8,9 @@ from torch.autograd import Variable
 
 class PolygonVGG16(nn.Module):
 
-    def __init__(self):
+    def __init__(self, pretrained: bool = True):
         super(PolygonVGG16, self).__init__()
-        vgg = torchvision.models.vgg16(pretrained=True).features
+        vgg = torchvision.models.vgg16(pretrained).features
         # remove max-pooling
         self.layers = nn.Sequential(*list(vgg.children())[:-1])
         self.store_indices: List[int] = [9, 16, 22, 29]
@@ -24,7 +24,7 @@ class PolygonVGG16(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        # (3, H, W) -> 
+        # (3, H, W) ->
         # [(128, 56, 56), (256, 28, 28), (512, 28, 28), (512, 28, 28]
         assert x.size()[1:] == torch.Size([3, 224, 224])
 
@@ -42,9 +42,9 @@ class PolygonCNN(nn.Module):
        ConvLSTM.
     """
 
-    def __init__(self):
+    def __init__(self, pretrained: bool = True):
         super(PolygonCNN, self).__init__()
-        self.cnn = PolygonVGG16()
+        self.cnn = PolygonVGG16(pretrained)
 
         # x: (128, 56, 56) -> pool: (128, 28, 28) -> conv: (128, 28, 28)
         self.out1_layers = nn.Sequential(
@@ -91,7 +91,6 @@ class PolygonCNN(nn.Module):
         x_concat = torch.cat((out1, out2, out3, out4), 1)  # (512, 28, 28)
         out = self.conv(x_concat)  # (128, 28, 28)
 
-        assert out.size()[1:] == torch.Size([128, 28, 28])
         return out
 
 
@@ -137,7 +136,7 @@ class ConvLSTMCell(nn.Module):
 
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.devive: str = devive
+        self.device: str = device
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
@@ -160,7 +159,6 @@ class ConvLSTMCell(nn.Module):
         return h_next, c_next
 
     def init_hidden(self, batch_size):
-        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
         return (
             Variable(
                 torch.zeros(
@@ -205,7 +203,7 @@ class ConvLSTM(nn.Module):
 
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.devive: str = devive
+        self.device: str = device
 
         cell_list = []
         for i in range(0, self.num_layers):
@@ -297,9 +295,9 @@ class ConvLSTM(nn.Module):
 
 class PolygonRNN(nn.Module):
 
-    def __init__(self, device: Optional[str] = None):
+    def __init__(self, pretrained: bool = True, device: Optional[str] = None):
         super(PolygonRNN, self).__init__()
-        self.cnn = PolygonCNN()
+        self.cnn = PolygonCNN(pretrained)
         self.conv_lstm = ConvLSTM(
             input_size=(28, 28),
             input_dim=131,
@@ -318,15 +316,15 @@ class PolygonRNN(nn.Module):
         self.fc = nn.Linear(28 * 28 * 2, 28 * 28 + 3)
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.devive: str = devive
+        self.device: str = device
 
     def forward(self, img, first, second, third):
-        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+        assert img.size()[1:] == torch.Size([3, 224, 224])
+
         size: torch.Size = second.size()
         batch_size: int = size[0]
         seq_len: int = size[1]  # sequential length
 
-        assert img.size()[1:] == torch.Size([3, 224, 224])
         features = self.cnn(img)
 
         # (B, C: 128, H: 28, W: 28) -> (B, 1, C: 128, H: 28, W: 28)
@@ -360,14 +358,3 @@ class PolygonRNN(nn.Module):
         output = output.contiguous().view(batch_size, seq_len, -1)
 
         return output  # (B, seq_len, 787)
-
-
-if __name__ == '__main__':
-    img = torch.zeros((2, 3, 224, 224))  # (B, C, H, W)
-    first = torch.zeros((2, 28*28+3))
-    second = torch.zeros((2, 58, 28*28+3))
-    third = torch.zeros((2, 58, 28*28+3))
-
-    model = PolygonRNN()
-    out = model(img, first, second, third)
-    print(out.size())

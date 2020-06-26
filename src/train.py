@@ -22,7 +22,7 @@ def load_yaml(path: str) -> Dict[str, Any]:
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
-batch_size: int = 16
+batch_size: int = 6
 lr: float = 1e-4
 num_epochs: int = 200
 seq_len: int = 60
@@ -88,7 +88,8 @@ if __name__ == '__main__':
         metrics['valid_loss'].append(valid_loss)
 
         logger.info(
-            f'TRAIN LOSS: {train_loss:.5f}, VALID LOSS: {valid_loss:.5f}'
+            f'EPOCH: {str(epoch).zfill(3)}, TRAIN LOSS: {train_loss:.5f}, '
+            f'VALID LOSS: {valid_loss:.5f}'
         )
 
         if valid_loss < best_loss:

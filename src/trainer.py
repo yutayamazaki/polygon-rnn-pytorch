@@ -10,12 +10,13 @@ class AbstractTrainer:
         self, model, optimizer, criterion,
         device: Optional[str] = None
     ):
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device: str = device
+
         self.optimizer = optimizer
         self._model = model.to(self.device)
         self.criterion = criterion.to(self.device)
-        self.device = device
-        if device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def epoch_train(self, train_loader):
         raise NotImplementedError()
@@ -56,11 +57,11 @@ class PolygonRNNTrainer(AbstractTrainer):
 
             self.optimizer.step()
 
-            output_index: torch.Tensor = torch.argmax(outputs, 1)
-            correct = (
-                targets == output_index  # type: ignore
-            ).type(dtype).sum().item()
-            acc = correct * 1.0 / targets.shape[0]
+            # output_index: torch.Tensor = torch.argmax(outputs, 1)
+            # correct = (
+            #     targets == output_index  # type: ignore
+            # ).type(dtype).sum().item()
+            # acc = correct * 1.0 / targets.shape[0]
 
         return epoch_loss / len(train_loader)
 
@@ -86,11 +87,10 @@ class PolygonRNNTrainer(AbstractTrainer):
 
             epoch_loss += float(loss.item())
 
-            output_index: torch.Tensor = torch.argmax(outputs, 1)
-            correct = (
-                targets == output_index  # type: ignore
-            ).type(dtype).sum().item()
-            acc = correct * 1.0 / targets.shape[0]
+            # output_index: torch.Tensor = torch.argmax(outputs, 1)
+            # correct = (
+            #     targets == output_index  # type: ignore
+            # ).type(dtype).sum().item()
+            # acc = correct * 1.0 / targets.shape[0]
 
         return epoch_loss / len(eval_loader)
-
