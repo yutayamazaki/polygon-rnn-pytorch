@@ -164,16 +164,17 @@ class ConvLSTMCell(nn.Module):
         return h_next, c_next
 
     def init_hidden(self, batch_size):
+        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
         return (
             Variable(
                 torch.zeros(
                     batch_size, self.hidden_dim, self.height, self.width
-                )
+                ).to(device)
             ),
             Variable(
                 torch.zeros(
                     batch_size, self.hidden_dim, self.height, self.width
-                )
+                ).to(device)
             )
         )
 
@@ -249,7 +250,6 @@ class ConvLSTM(nn.Module):
         cur_layer_input = input_tensor
 
         for layer_idx in range(self.num_layers):
-
             h, c = hidden_state[layer_idx]
             output_inner = []
             for t in range(seq_len):
@@ -319,6 +319,7 @@ class PolygonRNN(nn.Module):
         assert x.size()[1:] == torch.Size([3, 224, 224])
 
     def forward(self, img, first, second, third):
+        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
         size: torch.Size = second.size()
         batch_size: int = size[0]
         seq_len: int = size[1]  # sequential length
@@ -334,7 +335,7 @@ class PolygonRNN(nn.Module):
         input_f = first[:, :-3].view(-1, 1, 28, 28).unsqueeze(1).repeat(
             1, seq_len - 1, 1, 1, 1
         )
-        padding_f = torch.zeros([batch_size, 1, 1, 28, 28])
+        padding_f = torch.zeros([batch_size, 1, 1, 28, 28]).to(device)
 
         # (B, seq_len-1, 1, 28, 28) -> (B, seq_len, 1, 28, 28)
         input_f = torch.cat([padding_f, input_f], dim=1)

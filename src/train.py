@@ -22,9 +22,9 @@ def load_yaml(path: str) -> Dict[str, Any]:
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
-batch_size: int = 4
+batch_size: int = 16
 lr: float = 1e-4
-num_epochs: int = 2
+num_epochs: int = 200
 seq_len: int = 60
 
 if __name__ == '__main__':
