@@ -55,8 +55,6 @@ class PolygonRNNTrainer(AbstractTrainer):
             ).type(dtype).sum().item()
             acc = correct * 1.0 / targets.shape[0]
 
-            msg: str = f'BATCH: {batch_idx + 1}, ACC: {acc}'
-            print(msg)
         return epoch_loss / len(train_loader)
 
     def epoch_eval(self, eval_loader) -> float:
@@ -72,17 +70,12 @@ class PolygonRNNTrainer(AbstractTrainer):
             x3 = Variable(data[3].type(dtype)).to(self.device)
             gt = Variable(data[4].type(dtype_t)).to(self.device)
 
-            self.optimizer.zero_grad()
-
             outputs: torch.Tensor = self._model(x, x1, x2, x3)
 
             outputs = outputs.contiguous().view(-1, 28 * 28 + 3)
             targets: torch.Tensor = gt.contiguous().view(-1)
 
             loss = self.criterion(outputs, targets)
-            loss.backward()
-
-            self.optimizer.step()
 
             epoch_loss += float(loss.item())
 
@@ -92,6 +85,5 @@ class PolygonRNNTrainer(AbstractTrainer):
             ).type(dtype).sum().item()
             acc = correct * 1.0 / targets.shape[0]
 
-            msg: str = f'BATCH: {batch_idx + 1}, ACC: {acc}'
-            print(msg)
         return epoch_loss / len(eval_loader)
+
