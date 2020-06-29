@@ -1,12 +1,15 @@
 import glob
 import json
 import os
+import random
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data.dataset import Dataset
+
+import polygon_tools as pt
 
 
 def load_cityscapes(
@@ -54,35 +57,15 @@ class PolygonCityScapesDataset(Dataset):
             'bike', 'bus', 'car', 'person', 'mbike', 'truck', 'rider', 'train'
         ]
 
-    def _resize_polygon(self, polygon: List[List[int]]) -> List[List[float]]:
-        polygon = np.array(polygon)
-
-        min_x: int = int(np.min(polygon[:, 0]))  # type: ignore
-        min_y: int = int(np.min(polygon[:, 1]))  # type: ignore
-        max_x: int = int(np.max(polygon[:, 0]))  # type: ignore
-        max_y: int = int(np.max(polygon[:, 1]))  # type: ignore
-
-        new_polygon: List[List[float]] = []
-        for points in polygon:
-            object_h: int = max_y - min_y
-            object_w: int = max_x - min_x
-            scale_h: float = 224.0 / object_h
-            scale_w: float = 224.0 / object_w
-            index_a: float = (points[0] - min_x) * scale_w
-            index_b: float = (points[1] - min_y) * scale_h
-            index_a_: float = np.maximum(0, np.minimum(223, index_a))
-            index_b_: float = np.maximum(0, np.minimum(223, index_b))
-            new_points: List[float] = [index_a_, index_b_]
-            new_polygon.append(new_points)
-        return new_polygon
-
     def __getitem__(self, index):
         img_path, json_path = self.city_paths[index]
 
         with open(json_path, 'r') as f:
             json_file: Dict[str, Any] = json.load(f)
 
-        for obj in json_file['objects']:
+        while True:
+            # for obj in json_file['objects']:
+            obj = random.choice(json_file['objects'])
             class_name: str = obj['label']
             polygon: List[List[int]] = obj['polygon']
             if class_name in self.class_names:
@@ -94,21 +77,24 @@ class PolygonCityScapesDataset(Dataset):
         max_x = np.max(polygon_array[:, 0])
         max_y = np.max(polygon_array[:, 1])
 
+        h = max_y - min_y
+        w = max_x - min_x
         shape = (min_x, min_y, max_x, max_y)
-        img: Image.Image = Image.open(img_path).convert('RGB').crop(shape)
-        img: Image.Image = img.resize((224, 224), Image.BILINEAR)
+
+        img: Image.Image = Image.open(img_path).convert('RGB')
+        img, _ = pt.crop_object(img, polygon, (224, 224))
 
         point_num: int = len(polygon)
         point_count: int = 2
         label_array: np.ndarray = np.zeros([self.seq_len, 28 * 28 + 3])
         label_index_array: np.ndarray = np.zeros([self.seq_len])
         if point_num < self.seq_len - 3:
-            polygon: List[List[float]] = self._resize_polygon(polygon)
+            polygon: List[List[float]] = pt.resize_polygon(polygon, (224, 224))
             polygon = np.array(polygon)
             for points in polygon:
-                index_a: int = int(points[0] / 8)
-                index_b: int = int(points[1] / 8)
-                index: int = index_b * 28 + index_a
+                index_w: int = int(points[0] / 8)
+                index_h: int = int(points[1] / 8)
+                index: int = index_h + index_w * 28
                 label_array[point_count, index] = 1
                 label_index_array[point_count] = index
                 point_count += 1
@@ -123,21 +109,21 @@ class PolygonCityScapesDataset(Dataset):
                 elif kkk % (point_num + 3) == 1:
                     index: int = 28 * 28 + 2
                 else:
-                    index_a = int(polygon[kkk % (point_num + 3) - 2][0] / 8)
-                    index_b = int(polygon[kkk % (point_num + 3) - 2][1] / 8)
-                    index: int = index_b * 28 + index_a
+                    index_w = int(polygon[kkk % (point_num + 3) - 2][0] / 8)
+                    index_h = int(polygon[kkk % (point_num + 3) - 2][1] / 8)
+                    index: int = index_h + index_w * 28
                 label_array[kkk, index] = 1
                 label_index_array[kkk] = index
 
         else:
             scale: float = point_num * 1.0 / (self.seq_len - 3)
             index_list = (np.arange(0, self.seq_len - 3) * scale).astype(int)
-            polygon: List[List[float]] = self._resize_polygon(polygon)
+            polygon: List[List[float]] = pt.resize_polygon(polygon, (224, 224))
             polygon = np.array(polygon)
             for points in polygon[index_list]:
-                index_a: int = int(points[0] / 8)
-                index_b: int = int(points[1] / 8)
-                index: int = index_b * 28 + index_a
+                index_w: int = int(points[0] / 8)
+                index_h: int = int(points[1] / 8)
+                index: int = index_h + index_w * 28
                 label_array[point_count, index] = 1
                 label_index_array[point_count] = index
                 point_count += 1
@@ -150,7 +136,7 @@ class PolygonCityScapesDataset(Dataset):
         # label_array[2] (787, ): {0: 786, 1: 1}
         # label_index_array (seq_len, ): Hold points of polygon in each
         #                                sequence by its index.
-g        return (
+        return (
             img, label_array[2], label_array[:-2],
             label_array[1:-1], label_index_array[2:]
         )

@@ -57,12 +57,6 @@ class PolygonRNNTrainer(AbstractTrainer):
 
             self.optimizer.step()
 
-            # output_index: torch.Tensor = torch.argmax(outputs, 1)
-            # correct = (
-            #     targets == output_index  # type: ignore
-            # ).type(dtype).sum().item()
-            # acc = correct * 1.0 / targets.shape[0]
-
         return epoch_loss / len(train_loader)
 
     def epoch_eval(self, eval_loader) -> float:
@@ -86,11 +80,5 @@ class PolygonRNNTrainer(AbstractTrainer):
             loss = self.criterion(outputs, targets)
 
             epoch_loss += float(loss.item())
-
-            # output_index: torch.Tensor = torch.argmax(outputs, 1)
-            # correct = (
-            #     targets == output_index  # type: ignore
-            # ).type(dtype).sum().item()
-            # acc = correct * 1.0 / targets.shape[0]
 
         return epoch_loss / len(eval_loader)
