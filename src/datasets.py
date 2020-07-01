@@ -71,16 +71,6 @@ class PolygonCityScapesDataset(Dataset):
             if class_name in self.class_names:
                 break
 
-        polygon_array: np.ndarray = np.array(polygon)
-        min_x = np.min(polygon_array[:, 0])
-        min_y = np.min(polygon_array[:, 1])
-        max_x = np.max(polygon_array[:, 0])
-        max_y = np.max(polygon_array[:, 1])
-
-        h = max_y - min_y
-        w = max_x - min_x
-        shape = (min_x, min_y, max_x, max_y)
-
         img: Image.Image = Image.open(img_path).convert('RGB')
         img, _ = pt.crop_object(img, polygon, (224, 224))
 
