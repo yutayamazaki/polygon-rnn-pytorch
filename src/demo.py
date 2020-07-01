@@ -1,6 +1,10 @@
+import argparse
 import copy
+import glob
 import math
 import os
+import random
+from collections import Counter
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -61,65 +65,81 @@ def sort_polygon(polygon: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
 
 
 if __name__ == '__main__':
-    from collections import Counter
+    utils.seed_everything(428)
 
-    utils.seed_everything()
-
-    img_path: str = '../leftImg8bit_trainvaltest/leftImg8bit/train/aachen/aachen_000000_000019_leftImg8bit.png'
-    json_path: str = '../gtFine_trainvaltest/gtFine/train/aachen/aachen_000000_000019_gtFine_polygons.json'
-    dataset: List[Tuple[str, str]] = [(img_path, json_path)]
-
-    demo_dataset = PolygonCityScapesDataset(
-        city_paths=dataset, transform=transforms.ToTensor()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-w', '--weights', type=str, help='The weights of trained model.'
     )
-    demo_loader = torch.utils.data.DataLoader(
-        demo_dataset, batch_size=1
-    )
+    args = parser.parse_args()
 
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
     net: nn.Module = PolygonRNN()
-    net.load_state_dict(torch.load('../experiments/20200626_04-41-59/weights/loss3.62720_epoch045.pth', map_location=device))
+    net.load_state_dict(torch.load(args.weights, map_location=device))
     net = net.eval()
-
     dtype = torch.FloatTensor
     dtype_t = torch.LongTensor
 
-    for data in demo_loader:
-        x = Variable(data[0].type(dtype))
-        x1 = Variable(data[1].type(dtype))
-        x2 = Variable(data[2].type(dtype))
-        x3 = Variable(data[3].type(dtype))
-        gt = Variable(data[4].type(dtype_t))
+    images: List[str] = glob.glob('../leftImg8bit_trainvaltest/leftImg8bit/val/*/*.png')
+    for img_path in images[:50]:
+        fname: str = os.path.basename(img_path)
+        file_id, _ = os.path.splitext(fname)
+        file_id = file_id[:-12]
+        city: str = file_id.split('_')[0]
+        json_path: str = f'../gtFine_trainvaltest/gtFine/val/{city}/{file_id}_gtFine_polygons.json'
+        dataset: List[Tuple[str, str]] = [(img_path, json_path)]
 
-        outputs: torch.Tensor = net(x, x1, x2, x3)
+        demo_dataset = PolygonCityScapesDataset(
+            city_paths=dataset, transform=transforms.ToTensor()
+        )
+        demo_loader = torch.utils.data.DataLoader(
+            demo_dataset, batch_size=1
+        )
 
-    output: np.ndarray = outputs[0].detach().numpy()  # (seq_len, 787)
-    polygon: List[Tuple[int, int]] = []
+        for data in demo_loader:
+            x = Variable(data[0].type(dtype))
+            x1 = Variable(data[1].type(dtype))
+            x2 = Variable(data[2].type(dtype))
+            x3 = Variable(data[3].type(dtype))
+            gt = Variable(data[4].type(dtype_t))
 
-    for out in output:
-        index: int = int(np.argmax(out))
-        point = index2point(index)
-        polygon.append(point)
+            outputs: torch.Tensor = net(x, x1, x2, x3)
 
-    polygon = list(set(polygon))
+        output: np.ndarray = outputs[0].detach().numpy()  # (seq_len, 787)
+        polygon: List[Tuple[int, int]] = []
 
-    # img = Image.fromarray(np.uint8(np.zeros((28, 28))))
-    img = np.zeros((28, 28))
-    for x_, y_ in polygon:
-        img[x_, y_] = 1.
-    # draw = ImageDraw.Draw(img)
-    # draw.polygon(xy=sort_polygon(polygon), fill=255)
+        for out in output:
+            index: int = int(np.argmax(out))
+            point = index2point(index)
+            polygon.append(point)
 
-    # Save prediction result
-    fig = plt.figure()
-    ax1 = fig.add_subplot(1, 2, 1)
-    ax2 = fig.add_subplot(1, 2, 2)
+        polygon = list(set(polygon))
 
-    ax1.imshow(np.array(img))
-    ax1.set_title('Prediction')
-    img = np.uint8(x[0].permute(2, 1, 0).detach().numpy() * 255)
+        # Save prediction result
+        fig = plt.figure()
+        ax1 = fig.add_subplot(1, 3, 1)
+        ax2 = fig.add_subplot(1, 3, 2)
+        ax3 = fig.add_subplot(1, 3, 3)
 
-    ax2.imshow(Image.fromarray(img).resize((28, 28)))
-    ax2.set_title('Original')
+        orig_image: Image.Image = transforms.ToPILImage()(x[0]).resize((224, 224))
+        ax1.imshow(orig_image)
+        ax1.set_title('Original')
 
-    fig.savefig('demo.png')
+        draw = ImageDraw.Draw(orig_image)
+        s: float = 224 / 28
+        polygon = [(p[0] * s, p[1] * s) for p in polygon]
+        draw.line(xy=sort_polygon(polygon), fill=255)
+        ax3.imshow(orig_image)
+        ax3.set_title('Prediction')
+
+        orig_image2: Image.Image = transforms.ToPILImage()(x[0]).resize((224, 224))
+        draw = ImageDraw.Draw(orig_image2)
+        polygon_anno: List[Tuple[int, int]] = [(s * index2point(int(idx))[0], s * index2point(int(idx))[1]) for idx in gt[0]]
+        draw.line(xy=sort_polygon(polygon_anno), fill=255)
+        ax2.imshow(orig_image2)
+        ax2.set_title('Annotation')
+
+        fig.savefig(f'./demo/{file_id}.png')
+        plt.clf()
+
+        del fig, ax1, ax2, ax3

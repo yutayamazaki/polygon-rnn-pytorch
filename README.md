@@ -4,6 +4,7 @@ An implementation of PolygonRNN using PyTorch.
 
 ## [Annotating Object Instances with a Polygon-RNN](https://arxiv.org/abs/1704.05548)
 
+
 ### Hyper parameters
 
 |  |  |
